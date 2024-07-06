@@ -1,4 +1,4 @@
-# CSGORoll Trade Bot
+# CSGORoll Notification Bot
 
 This bot connects to the CSGORoll WebSocket API to monitor trades and sends notifications to Discord.
 
