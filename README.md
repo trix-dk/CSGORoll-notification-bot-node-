@@ -76,6 +76,12 @@ This bot connects to the CSGORoll WebSocket API to monitor trades and sends noti
      node index.js
      ```
 
+_________________________________________________________________________________________________________________________________________________________________________
+
+And yes i'm aware this bot is not perfect but the main purpose is fulfilled with it being able to send notifications to discord webhooks and being able to run from cmd. 
+If you encounter any issues or bugs, feel free to reach out to me on discord and I'll push a fix asap: trix__dk  
+
+
 ### License
 
 This project is licensed under the MIT License.
