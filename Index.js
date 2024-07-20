@@ -17,8 +17,8 @@ let reconnectAttempts = 0;
 let pingInterval;
 
 async function fetchCoinBalance(cookie) {
-  try{
-      const response = await axios({
+  try {
+    const response = await axios({
       method: "get",
       maxBodyLength: Infinity,
       url: "https://api.csgoroll.com/graphql?operationName=CurrentUser&variables=%7B%7D&extensions=%7B%22persistedQuery%22:%7B%22version%22:1,%22sha256Hash%22:%22324e1751a8004ccb4ce438aa1068883f53e28eacab64e30f6ab61f78768b3b75%22%7D%7D",
@@ -42,13 +42,17 @@ async function fetchCoinBalance(cookie) {
     });
 
     const wallets = response.data?.data?.currentUser?.wallets;
+    if (!wallets) {
+      console.error("Wallets data is undefined or null");
+      return null;
+    }
     const mainWallet = wallets.find(wallet => wallet.name === "MAIN");
     return mainWallet ? mainWallet.amount : null;
   } catch (error) {
-    console.error("Error fetching coin balance:", error);
     return null;
   }
 }
+
 
 const createTradePayload = {
   id: uuidv4(),
@@ -157,7 +161,7 @@ async function sendToDiscord(tradeData, webhookUrl) {
         { name: 'Markup', value: `${markup}%`, inline: true },
         { name: 'Total Sticker Value', value: totalStickerValue.toString(), inline: true },
         { name: 'Applied Stickers', value: formatStickers(stickers), inline: false },
-        { name: 'Balance', value: coinBalance.toString(), inline: true }
+        { name: 'Balance', value: coinBalance !== null ? coinBalance.toString() : 'N/A', inline: true }
       ],
       footer: { text: `Timestamp: ${timestamp}` }
     }]
@@ -172,9 +176,9 @@ async function sendToDiscord(tradeData, webhookUrl) {
     const data = await response.json();
     console.log('Successfully sent to Discord:', data);
   } catch (error) {
-    console.error('Error sending to Discord:', error);
   }
 }
+
 
 async function handleTrade(trade) {
   if (trade.status === "LISTED") {
