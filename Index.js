@@ -19,57 +19,78 @@ function prompt(question) {
   return new Promise((resolve) => rl.question(question, resolve));
 }
 
+const currentUserQuery = `
+  query CurrentUser {
+    currentUser {
+      id
+      wallets {
+        name
+        amount
+      }
+    }
+  }
+`;
+
+async function fetchCurrentUser(cookie) {
+  try {
+    const response = await axios({
+      method: "post",
+      url: "https://api.csgoroll.com/graphql",
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Cookie': cookie,
+        'User-Agent': 'Mozilla/5.0',
+      },
+      data: {
+        query: currentUserQuery,
+        variables: {}
+      }
+    });
+
+    if (response.data && response.data.data && response.data.data.currentUser) {
+      const userData = response.data.data.currentUser;
+      console.log('User data fetched:', userData);
+
+      // Set userId dynamically
+      const userId = userData.id || null;
+
+      // Get the main wallet balance or fallback to another wallet
+      const wallets = userData.wallets || [];
+      const mainWallet = wallets.find(wallet => wallet.name === "MAIN") || wallets[0];
+      const mainWalletBalance = mainWallet ? mainWallet.amount : null;
+
+      return { userId, mainWalletBalance };
+    } else {
+      console.error('Invalid response format:', response.data);
+      return { userId: null, mainWalletBalance: null };
+    }
+  } catch (error) {
+    console.error("Error fetching current user:", error);
+    return { userId: null, mainWalletBalance: null };
+  }
+}
+
 (async function() {
-  const userId = await prompt('Enter your user ID: ');
   const cookie = await prompt('Enter your cookie: ');
 
+  rl.close();
+
+  const { userId, mainWalletBalance } = await fetchCurrentUser(cookie);
+
+  if (!userId) {
+    console.error("Failed to fetch user ID.");
+    return;
+  }
+
+// MAKE SURE TO SET YOUR DISCORDWEBHOOK URLS!!!!
   const config = {
     cookie: cookie,
     userId: userId,
     discordDepositWebhookUrl: 'https://discord.com/api/webhooks/',
     discordWithdrawWebhookUrl: 'https://discord.com/api/webhooks/'
   };
-//replace with your actual webhook urls, for the cookie and userid when starting the bot a question will pop up and then you just paste the userid and cookie.
-
-  rl.close();
-
-  async function fetchCoinBalance(cookie) {
-    try {
-      const response = await axios({
-        method: "get",
-        maxBodyLength: Infinity,
-        url: "https://api.csgoroll.com/graphql?operationName=CurrentUser&variables=%7B%7D&extensions=%7B%22persistedQuery%22:%7B%22version%22:1,%22sha256Hash%22:%22324e1751a8004ccb4ce438aa1068883f53e28eacab64e30f6ab61f78768b3b75%22%7D%7D",
-        headers: {
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Apollographql-Client-Name': 'csgoroll-www',
-          'Apollographql-Client-Version': '086ab4a0',
-          'Cookie': cookie,
-          'Ngsw-Bypass': 'true',
-          'Origin': 'https://www.csgoroll.com',
-          'Referer': 'https://www.csgoroll.com/',
-          'Sec-Ch-Ua': '"Opera GX";v="109", "Not:A-Brand";v="8", "Chromium";v="123"',
-          'Sec-Ch-Ua-Mobile': '?0',
-          'Sec-Ch-Ua-Platform': '"Windows"',
-          'Sec-Fetch-Dest': 'empty',
-          'Sec-Fetch-Mode': 'cors',
-          'Sec-Fetch-Site': 'same-site',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 OPR/109.0.0.0',
-        },
-      });
-
-      const wallets = response.data?.data?.currentUser?.wallets;
-      if (!wallets) {
-        throw new Error("No wallets found");
-      }
-
-      const mainWallet = wallets.find(wallet => wallet.name === "MAIN");
-      return mainWallet ? mainWallet.amount : null;
-    } catch (error) {
-      console.error("Error fetching coin balance:", error);
-      return null;
-    }
-  }
+// MAKE SURE TO SET YOUR DISCORDWEBHOOK URLS!!!!
 
   const createTradePayload = {
     id: uuidv4(),
@@ -171,44 +192,79 @@ function prompt(question) {
       embeds: [{
         title: `${tradeType} Trade`,
         description: `**Status**: ${status}`,
-        color: tradeType === 'Deposit' ? 15158332 : 3066993, 
+        color: tradeType === 'Deposit' ? 15158332 : 3066993,
         fields: [
-          { name: 'Item', value: marketName, inline: true },
-          { name: 'Value', value: value ? value.toString() : '-', inline: true },
-          { name: 'Markup', value: markup ? `${markup}%` : '-', inline: true },
-          { name: 'Total Sticker Value', value: totalStickerValue ? totalStickerValue.toString() : '-', inline: true },
-          { name: 'Applied Stickers', value: formatStickers(stickers), inline: false },
-          { name: 'Balance', value: coinBalance ? coinBalance.toString() : '-', inline: true }
+          {
+            name: 'Item',
+            value: marketName,
+            inline: true
+        },
+        {
+            name: 'Value',
+            value: value !== null && value !== undefined ? value.toString() : '-',
+            inline: true
+        },
+        {
+            name: 'Markup',
+            value: markup !== null && markup !== undefined ? `${markup}%` : '0%',
+            inline: true
+        },
+        {
+            name: 'Total Sticker Value',
+            value: totalStickerValue !== null && totalStickerValue !== undefined ? totalStickerValue.toString() : '0',
+            inline: true
+        },
+        {
+            name: 'Applied Stickers',
+            value: formatStickers(stickers) || '',
+            inline: false
+        },
+        {
+            name: 'Balance',
+            value: coinBalance !== null && coinBalance !== undefined ? coinBalance.toString() : '-',
+            inline: true
+        }
+        
         ],
         footer: { text: `Timestamp: ${timestamp}` }
       }]
     };
 
     try {
-      const response = await axios.post(webhookUrl, embed, {
-        headers: { 'Content-Type': 'application/json' }
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(embed)
       });
-      console.log('Successfully sent to Discord:', response.data);
+
+      const data = await response.json();
+      console.log('Successfully sent to Discord:', data);
     } catch (error) {
-      console.error('Error sending to Discord:', error);
     }
   }
 
   async function handleTrade(trade) {
     const depositor = trade.depositor || {};
     const withdrawer = trade.withdrawer || {};
-    const item = trade.tradeItems && trade.tradeItems[0]; 
+    const item = trade.tradeItems && trade.tradeItems[0];
+
+    // Skip "listed" trades (trades that are just listed but not completed)
+    if (trade.status === 'listed') {
+        return; // Ignore trades in the "listed" status
+    }
 
     let tradeType = '';
     let webhookUrl = '';
+
+    // Log both deposits and withdrawals, but ignore irrelevant trades
     if (depositor.id === config.userId) {
-      tradeType = 'Deposit';
-      webhookUrl = config.discordDepositWebhookUrl;
+        tradeType = 'Deposit';
+        webhookUrl = config.discordDepositWebhookUrl;
     } else if (withdrawer.id === config.userId) {
-      tradeType = 'Withdraw';
-      webhookUrl = config.discordWithdrawWebhookUrl;
+        tradeType = 'Withdraw';
+        webhookUrl = config.discordWithdrawWebhookUrl;
     } else {
-      return; // Not relevant
+        return; // Not relevant for logging
     }
 
     const marketName = item ? item.marketName : '-';
@@ -216,23 +272,23 @@ function prompt(question) {
     const markup = item ? item.markupPercent : '-';
     const stickers = item ? item.stickers || [] : [];
     const totalStickerValue = calculateTotalStickerValue(stickers);
-    
-    const coinBalance = await fetchCoinBalance(config.cookie);
+
+    const coinBalance = await fetchCurrentUser(config.cookie).then(result => result.mainWalletBalance);
 
     const tradeData = {
-      tradeType,
-      status: trade.status,
-      marketName,
-      value,
-      markup,
-      totalStickerValue,
-      stickers,
-      coinBalance
+        tradeType,
+        status: trade.status,
+        marketName,
+        value,
+        markup,
+        totalStickerValue,
+        stickers,
+        coinBalance
     };
 
     console.log(`[${moment().tz('Europe/Berlin').format('HH:mm:ss')}] [${tradeType}] Status: ${trade.status}, Item: ${marketName}, Value: ${value}, Markup: ${markup}%, Total Sticker Value: ${totalStickerValue}, Coin Balance: ${coinBalance}`);
     await sendToDiscord(tradeData, webhookUrl);
-  }
+}
 
   function connect(config) {
     socket = new WebSocket(apiUrl, 'graphql-transport-ws', {
@@ -246,6 +302,7 @@ function prompt(question) {
     });
 
     socket.on('open', () => {
+      console.log("Websocket opened")
       reconnectAttempts = 0;
       socket.send(JSON.stringify({ type: 'connection_init' }));
       socket.send(JSON.stringify(createTradePayload));
@@ -256,42 +313,33 @@ function prompt(question) {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: 'ping' }));
         }
-      }, 30000);
+      }, 5000);
     });
 
     socket.on('message', async (data) => {
-      try {
-        const message = JSON.parse(data);
-        if (message.type === 'connection_ack') {
-          console.log(`[${moment().tz('Europe/Berlin').format('HH:mm:ss')}] Connected`);
-        } else if (message.payload?.data?.createTrade) {
-          const trade = message.payload.data.createTrade.trade;
-          await handleTrade(trade);
-        } else if (message.payload?.data?.updateTrade) {
-          const trade = message.payload.data.updateTrade.trade;
-          await handleTrade(trade);
-        }
-      } catch (error) {
-        console.error("Error processing message:", error);
+      const message = JSON.parse(data);
+      const trade = message.payload?.data?.createTrade?.trade || message.payload?.data?.updateTrade?.trade;
+      if (trade) {
+        await handleTrade(trade);
       }
     });
 
-    socket.on('error', (error) => {
-      console.error('WebSocket error:', error);
-      attemptReconnect(config);
+    socket.on('error', (err) => {
+      console.error('WebSocket error:', err.message);
+      clearInterval(pingInterval);
     });
 
     socket.on('close', () => {
-      console.log('WebSocket closed, attempting to reconnect...');
+      console.log('WebSocket closed. Attempting to reconnect...');
       clearInterval(pingInterval);
-      attemptReconnect(config);
+      sockets = sockets.filter(s => s !== socket);
+      if (reconnectAttempts < 5) {
+        reconnectAttempts++;
+        setTimeout(() => connect(config), 1000);
+      } else {
+        console.error('Failed to reconnect after multiple attempts.');
+      }
     });
-  }
-
-  function attemptReconnect(config) {
-    reconnectAttempts++;
-    const delay = Math.min(1000 * (2 ** reconnectAttempts), 30000);
-    setTimeout(() => connect(config), delay);
   }
 
   connect(config);
